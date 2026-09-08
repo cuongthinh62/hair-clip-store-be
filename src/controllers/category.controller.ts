@@ -3,7 +3,7 @@ import mongoose from 'mongoose'
 import { Category } from '../models/Category'
 import { Product } from '../models/Product'
 
-// ================== TYPES ==================
+// ================== TYPES & CONSTANTS ==================
 interface GetProductsByCategoryQuery {
   page?: string
   limit?: string
@@ -12,6 +12,21 @@ interface GetProductsByCategoryQuery {
 }
 
 const ALLOWED_SORT_FIELDS = ['createdAt', 'price', 'soldQuantity']
+
+// Danh sách các trường hợp lệ được phép truyền vào Body của Category
+const ALLOWED_CATEGORY_FIELDS = ['categoryName', 'slug', 'description', 'imgUrl', 'isActive']
+
+// Hàm helper tự động tạo slug từ tên danh mục
+const generateSlug = (str: string): string => {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/([^0-9a-z-\s])/g, '')
+    .replace(/(\s+)/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
 
 /**
  * GET /api/v1/categories
@@ -39,6 +54,46 @@ export const getCategories = async (req: Request, res: Response) => {
 }
 
 /**
+ * GET /api/v1/categories/:id
+ * Lấy chi tiết 1 danh mục theo ID
+ */
+export const getCategoryById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+
+    if (!mongoose.Types.ObjectId.isValid(id as string)) {
+      return res.status(400).json({
+        statusCode: 400,
+        message: 'ID danh mục không hợp lệ',
+        data: null
+      })
+    }
+
+    const category = await Category.findById(id)
+    if (!category) {
+      return res.status(404).json({
+        statusCode: 404,
+        message: 'Không tìm thấy danh mục',
+        data: null
+      })
+    }
+
+    return res.status(200).json({
+      statusCode: 200,
+      message: 'Lấy thông tin danh mục thành công',
+      data: category
+    })
+  } catch (error) {
+    console.error('Lỗi getCategoryById:', error)
+    return res.status(500).json({
+      statusCode: 500,
+      message: 'Lỗi server, vui lòng thử lại sau',
+      data: null
+    })
+  }
+}
+
+/**
  * GET /api/v1/categories/:id/products
  * Lấy danh sách sản phẩm thuộc 1 danh mục (có phân trang + sort)
  */
@@ -50,7 +105,6 @@ export const getProductsByCategory = async (
   try {
     const { id } = req.params
     const { sortBy, sortOrder } = req.query
-    console.log(id)
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -60,7 +114,6 @@ export const getProductsByCategory = async (
       })
     }
 
-    // Kiểm tra danh mục có tồn tại không
     const category = await Category.findOne({ _id: id, isActive: true })
     if (!category) {
       return res.status(404).json({
@@ -70,12 +123,10 @@ export const getProductsByCategory = async (
       })
     }
 
-    // --- Phân trang ---
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1)
     const limit = Math.max(1, parseInt(req.query.limit as string, 10) || 10)
     const skip = (page - 1) * limit
 
-    // --- Sắp xếp ---
     const sortField = ALLOWED_SORT_FIELDS.includes(sortBy as string) ? (sortBy as string) : 'createdAt'
     const sortDirection = sortOrder === 'asc' ? 1 : -1
     const sort: Record<string, 1 | -1> = { [sortField]: sortDirection }
@@ -108,6 +159,163 @@ export const getProductsByCategory = async (
       statusCode: 500,
       message: 'Lỗi server, vui lòng thử lại sau',
       data: null
+    })
+  }
+}
+
+/**
+ * POST /api/v1/categories
+ * Tạo mới danh mục
+ */
+export const createCategory = async (req: Request, res: Response) => {
+  try {
+    // Kiểm tra trường dư thừa / không hợp lệ
+    const invalidFields = Object.keys(req.body).filter((key) => !ALLOWED_CATEGORY_FIELDS.includes(key))
+    if (invalidFields.length > 0) {
+      return res.status(400).json({
+        statusCode: 400,
+        message: `Trường dữ liệu không hợp lệ: ${invalidFields.join(', ')}`,
+        data: null
+      })
+    }
+
+    const { categoryName, description, imgUrl, isActive } = req.body
+
+    if (!categoryName) {
+      return res.status(400).json({
+        statusCode: 400,
+        message: 'Tên danh mục (categoryName) là bắt buộc',
+        data: null
+      })
+    }
+
+    const slug = req.body.slug || generateSlug(categoryName)
+
+    const newCategory = await Category.create({
+      categoryName,
+      slug,
+      description: description || '',
+      imgUrl: imgUrl || '',
+      isActive: isActive !== undefined ? isActive : true
+    })
+
+    return res.status(201).json({
+      statusCode: 201,
+      message: 'Tạo danh mục thành công',
+      data: newCategory
+    })
+  } catch (error: any) {
+    console.error('Lỗi createCategory:', error)
+    return res.status(500).json({
+      statusCode: 500,
+      message: 'Lỗi server, vui lòng thử lại sau',
+      error: error.message
+    })
+  }
+}
+
+/**
+ * PUT /api/v1/categories/:id
+ * Cập nhật thông tin danh mục
+ */
+export const updateCategory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+
+    if (!mongoose.Types.ObjectId.isValid(id as string)) {
+      return res.status(400).json({
+        statusCode: 400,
+        message: 'ID danh mục không hợp lệ',
+        data: null
+      })
+    }
+
+    // Kiểm tra trường dư thừa / không hợp lệ
+    const invalidFields = Object.keys(req.body).filter((key) => !ALLOWED_CATEGORY_FIELDS.includes(key))
+    if (invalidFields.length > 0) {
+      return res.status(400).json({
+        statusCode: 400,
+        message: `Trường dữ liệu không hợp lệ: ${invalidFields.join(', ')}`,
+        data: null
+      })
+    }
+
+    const { categoryName, slug, description, imgUrl, isActive } = req.body
+
+    const updateData: any = {}
+    if (categoryName !== undefined) {
+      updateData.categoryName = categoryName
+      updateData.slug = slug || generateSlug(categoryName)
+    } else if (slug !== undefined) {
+      updateData.slug = slug
+    }
+
+    if (description !== undefined) updateData.description = description
+    if (imgUrl !== undefined) updateData.imgUrl = imgUrl
+    if (isActive !== undefined) updateData.isActive = isActive
+
+    const updatedCategory = await Category.findByIdAndUpdate(id, updateData, { new: true })
+
+    if (!updatedCategory) {
+      return res.status(404).json({
+        statusCode: 404,
+        message: 'Không tìm thấy danh mục để cập nhật',
+        data: null
+      })
+    }
+
+    return res.status(200).json({
+      statusCode: 200,
+      message: 'Cập nhật danh mục thành công',
+      data: updatedCategory
+    })
+  } catch (error: any) {
+    console.error('Lỗi updateCategory:', error)
+    return res.status(500).json({
+      statusCode: 500,
+      message: 'Lỗi server, vui lòng thử lại sau',
+      error: error.message
+    })
+  }
+}
+
+/**
+ * DELETE /api/v1/categories/:id
+ * Xóa danh mục
+ */
+export const deleteCategory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+
+    if (!mongoose.Types.ObjectId.isValid(id as string)) {
+      return res.status(400).json({
+        statusCode: 400,
+        message: 'ID danh mục không hợp lệ',
+        data: null
+      })
+    }
+
+    const deletedCategory = await Category.findByIdAndDelete(id)
+
+    if (!deletedCategory) {
+      return res.status(404).json({
+        statusCode: 404,
+        message: 'Không tìm thấy danh mục để xóa',
+        data: null
+      })
+    }
+
+    return res.status(200).json({
+      statusCode: 200,
+      message: 'Xóa danh mục thành công',
+      data: null
+    })
+  } catch (error: any) {
+    console.error('Lỗi deleteCategory:', error)
+    return res.status(500).json({
+      statusCode: 500,
+      message: 'Lỗi server, vui lòng thử lại sau',
+      error: error.message
     })
   }
 }
