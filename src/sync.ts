@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import dns from 'node:dns'
+import bcrypt from 'bcryptjs'
 
 // Import tất cả Model để Mongoose đăng ký Schema
 import { User } from './models/User'
@@ -20,10 +21,10 @@ const syncIndexesAndCollections = async () => {
       throw new Error('Chưa khai báo MONGO_URI trong .env')
     }
 
-    console.log('🔄 Đang kết nối tới MongoDB...')
+    console.log(' Đang kết nối tới MongoDB...')
     await mongoose.connect(mongoUri)
 
-    console.log('Đang khởi tạo các Collection và Indexes...')
+    console.log(' Đang khởi tạo các Collection và Indexes...')
 
     // Ép gọi các Model để đảm bảo chúng đã được nạp vào Mongoose Registry
     const modelList = [User, Product, SiteSetting, Category]
@@ -35,13 +36,36 @@ const syncIndexesAndCollections = async () => {
       // Đồng bộ các Indexes (unique, search index...)
       await model.syncIndexes()
 
-      console.log(`Đã đồng bộ bảng: ${model.collection.name}`)
+      console.log(` Đã đồng bộ bảng: ${model.collection.name}`)
     }
 
-    console.log('Đồng bộ toàn bộ bảng thành công!')
+    console.log(' Đang khởi tạo/cập nhật tài khoản admin test...')
+
+    // Băm mật khẩu "12345" bằng bcrypt
+    const passwordHash = await bcrypt.hash('12345', 10)
+
+    // Cập nhật hoặc thêm mới user admin chuẩn theo các trường đã định nghĩa
+    await User.findOneAndUpdate(
+      { username: 'admin' },
+      {
+        username: 'admin',
+        passwordHash: passwordHash,
+        fullName: 'Quản trị viên',
+        secretKey: 'my_secret_key',
+        role: 'admin'
+      },
+      { upsert: true, new: true }
+    )
+
+    console.log(' Đồng bộ toàn bộ bảng và cập nhật tài khoản admin thành công!')
+    console.log('--------------------------------------------------')
+    console.log('Username: admin')
+    console.log('Password: 12345')
+    console.log('--------------------------------------------------')
+
     process.exit(0)
   } catch (error) {
-    console.error('Lỗi khi đồng bộ bảng:', error)
+    console.error(' Lỗi khi đồng bộ bảng:', error)
     process.exit(1)
   }
 }
