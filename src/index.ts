@@ -8,9 +8,9 @@ import authRoutes from './routes/auth.routes'
 
 dotenv.config()
 
-require('node:dns/promises').setServers(['1.1.1.1', '8.8.8.8'])
-import dns from 'node:dns/promises'
-dns.setServers(['1.1.1.1', '8.8.8.8'])
+// require('node:dns/promises').setServers(['1.1.1.1', '8.8.8.8'])
+// import dns from 'node:dns/promises'
+// dns.setServers(['1.1.1.1', '8.8.8.8'])
 // tắt 3 dòng trên để chạy local máy anh Thịnh
 
 const app = express()
