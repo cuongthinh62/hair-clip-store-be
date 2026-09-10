@@ -1,24 +1,27 @@
 import { Router } from 'express'
 import {
   getProducts,
-  getProductById,
   getProductBySlug,
+  getProductById,
   createProduct,
   updateProduct,
   deleteProduct
 } from '../controllers/product.controller'
-import { authenticate } from '../middleware/auth.middleware'
 
 const router = Router()
 
-// Public Routes (Không yêu cầu đăng nhập)
+// Lấy danh sách sản phẩm (Filter, Search, Phân trang)
 router.get('/', getProducts)
-router.get('/slug/:slug', getProductBySlug) // Đặt trước /:id để tránh trùng khớp route
+
+// Lấy chi tiết sản phẩm theo Slug (Ví dụ: /api/v1/products/slug/kep-me-vai-voan)
+router.get('/slug/:slug', getProductBySlug)
+
+// Lấy chi tiết sản phẩm theo ID (Ví dụ: /api/v1/products/6a93dcee7b57b31481b56785)
 router.get('/:id', getProductById)
 
-// Protected Routes (Yêu cầu Token xác thực)
-router.post('/', authenticate, createProduct)
-router.put('/:id', authenticate, updateProduct)
-router.delete('/:id', authenticate, deleteProduct)
+// CRUD Admin
+router.post('/', createProduct)
+router.put('/:id', updateProduct)
+router.delete('/:id', deleteProduct)
 
 export default router
