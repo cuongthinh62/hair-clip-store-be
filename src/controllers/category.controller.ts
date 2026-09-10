@@ -281,7 +281,7 @@ export const updateCategory = async (req: Request, res: Response) => {
 
 /**
  * DELETE /api/v1/categories/:id
- * Xóa danh mục
+ * Xóa danh mục và các sản phẩm liên quan (Xóa cứng)
  */
 export const deleteCategory = async (req: Request, res: Response) => {
   try {
@@ -295,9 +295,9 @@ export const deleteCategory = async (req: Request, res: Response) => {
       })
     }
 
-    const deletedCategory = await Category.findByIdAndDelete(id)
-
-    if (!deletedCategory) {
+    // 1. Kiểm tra danh mục có tồn tại hay không
+    const category = await Category.findById(id)
+    if (!category) {
       return res.status(404).json({
         statusCode: 404,
         message: 'Không tìm thấy danh mục để xóa',
@@ -305,9 +305,21 @@ export const deleteCategory = async (req: Request, res: Response) => {
       })
     }
 
+    // 2. Xóa toàn bộ sản phẩm có categoryId khớp. Dùng native collection để
+    // không bị Mongoose cast giá trị chuỗi cũ thành ObjectId trước khi query.
+    const categoryObjectId = new mongoose.Types.ObjectId(id as string)
+    const deleteResult = await Product.collection.deleteMany({
+      $or: [{ categoryId: categoryObjectId }, { categoryId: id }, { 'categoryId.$oid': id }]
+    })
+
+    console.log(`Đã xóa thành công ${deleteResult.deletedCount} sản phẩm thuộc danh mục ${id}`)
+
+    // 4. Xóa chính danh mục đó
+    await Category.findByIdAndDelete(id)
+
     return res.status(200).json({
       statusCode: 200,
-      message: 'Xóa danh mục thành công',
+      message: `Xóa danh mục và ${deleteResult.deletedCount} sản phẩm liên quan thành công`,
       data: null
     })
   } catch (error: any) {
@@ -315,7 +327,7 @@ export const deleteCategory = async (req: Request, res: Response) => {
     return res.status(500).json({
       statusCode: 500,
       message: 'Lỗi server, vui lòng thử lại sau',
-      error: error.message
+      data: null
     })
   }
 }
